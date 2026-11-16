@@ -1,0 +1,18 @@
+*.iml
+.gradle
+/build
+build/
+local.properties
+/.idea
+.DS_Store
+/captures
+.externalNativeBuild
+.cxx
+
+# 签名材料不进仓库
+keystore.properties
+*.jks
+*.keystore
+
+# 构建日志
+*.log

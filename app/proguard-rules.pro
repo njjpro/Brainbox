@@ -1,0 +1,2 @@
+-dontwarn org.jetbrains.annotations.**
+-keepclassmembers class * extends androidx.room.RoomDatabase { <init>(); }
