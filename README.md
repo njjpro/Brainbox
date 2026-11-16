@@ -40,7 +40,26 @@ export ANDROID_HOME=/path/to/android-sdk   # 内含 platforms;android-34、build
 
 产物：`app/build/outputs/apk/release/app-release.apk`。
 
-> release 签名配置读取 `app/brainbox-release.jks`。自己构建时请换成自己的 keystore，并修改 `app/build.gradle.kts` 里的 `signingConfigs.release`（或者在本地放弃签名配置，直接 `./gradlew assembleDebug`）。
+> 签名信息从仓库根目录的 `keystore.properties` 读取（该文件与 `*.jks` 都已 gitignore，密钥不会进仓库）。没有这个文件时构建出的是未签名 APK，仍然可以 `./gradlew assembleDebug` 调试。
+>
+> 自己构建的话，在根目录建 `keystore.properties`：
+>
+> ```properties
+> storeFile=app/brainbox-release.jks
+> storePassword=你的密码
+> keyAlias=你的别名
+> keyPassword=你的密码
+> ```
+
+## 单元测试
+
+```bash
+./gradlew testReleaseUnitTest
+```
+
+覆盖金额解析/格式化、版本号比较、重复提醒的下次触发时间（含 1 月 31 日按月推进得到 2 月 28 日这类边界）、过期提醒前移、标题回退等纯逻辑。
+
+> ⚠️ Windows 已知问题：**项目路径含非 ASCII 字符（如中文目录）时，单测会报 `ClassNotFoundException`**（Gradle 测试进程读 classpath 的编码问题），编译、打包不受影响。要在这种情况下跑单测，把项目复制到纯 ASCII 路径再执行。
 
 ## 发布新版本（触发 App 内更新）
 
