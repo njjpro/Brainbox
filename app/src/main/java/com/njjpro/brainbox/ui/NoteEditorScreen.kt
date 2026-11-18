@@ -201,11 +201,23 @@ fun NoteEditorScreen(
                             }
                         }
 
+                        val isPast = reminderAt <= System.currentTimeMillis()
                         Text(
                             text = "到点会发系统通知；重复提醒在下一次会自动续上。",
                             style = MaterialTheme.typography.labelSmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                         )
+                        if (isPast) {
+                            Text(
+                                text = if (repeatRule == REPEAT_NONE) {
+                                    "⚠️ 这个时间已经过去了，保存后不会响，请换成未来的时间。"
+                                } else {
+                                    "⚠️ 这个时间已经过去了，保存时会顺延到下一个周期。"
+                                },
+                                style = MaterialTheme.typography.labelSmall,
+                                color = MaterialTheme.colorScheme.error,
+                            )
+                        }
                     } else {
                         Text(
                             text = "打开开关即可设置时间，比如「明天 9:00 去买菜」。",

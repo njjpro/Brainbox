@@ -13,6 +13,7 @@ import com.njjpro.brainbox.data.Expense
 import com.njjpro.brainbox.data.Note
 import com.njjpro.brainbox.data.REPEAT_NONE
 import com.njjpro.brainbox.data.Repository
+import com.njjpro.brainbox.notify.Notifications
 import com.njjpro.brainbox.notify.ReminderScheduler
 import com.njjpro.brainbox.update.CheckResult
 import com.njjpro.brainbox.update.UpdateChecker
@@ -61,16 +62,26 @@ class BrainboxViewModel(app: Application) : AndroidViewModel(app) {
             val now = System.currentTimeMillis()
             val base = note.copy(updatedAt = now)
             val newId = repository.saveNote(base)
-            var saved = base.copy(id = if (base.id == 0L) newId else base.id)
 
-            val reminderAt = saved.reminderAt
-            if (reminderAt != null && reminderAt > now) {
-                saved = saved.copy(reminderActive = true)
-                repository.saveReminderState(saved)
+            // 时间已经过去：重复提醒顺延到下一次，单次提醒不再保留（避免留下"看着有提醒、其实永远不会响"的记录）
+            val raw = base.reminderAt
+            val effective = when {
+                raw == null -> null
+                raw > now -> raw
+                base.repeatRule != REPEAT_NONE ->
+                    ReminderScheduler.rollForward(base.copy(reminderActive = true)).reminderAt
+                else -> null
+            }
+
+            val saved = base.copy(
+                id = if (base.id == 0L) newId else base.id,
+                reminderAt = effective,
+                reminderActive = effective != null,
+            )
+            repository.saveReminderState(saved)
+            if (saved.reminderActive) {
                 ReminderScheduler.schedule(appContext, saved)
             } else {
-                saved = saved.copy(reminderActive = false)
-                repository.saveReminderState(saved)
                 ReminderScheduler.cancel(appContext, saved.id)
             }
             onSaved(saved.id)
@@ -111,6 +122,16 @@ class BrainboxViewModel(app: Application) : AndroidViewModel(app) {
     fun snoozeReminder(note: Note, minutes: Int) {
         val target = System.currentTimeMillis() + TimeUnit.MINUTES.toMillis(minutes.toLong())
         setReminder(note, target, note.repeatRule)
+    }
+
+    // ---------------- 提醒可靠性 ----------------
+
+    /** 立即发一条通知，检查通知权限与渠道。 */
+    fun sendTestNotification(): Boolean = Notifications.showTest(appContext)
+
+    /** 10 秒后走一次完整的闹钟链路，检查 AlarmManager 是否能唤醒并送达。 */
+    fun scheduleTestReminder(delaySeconds: Long = 10L) {
+        ReminderScheduler.scheduleTest(appContext, delaySeconds * 1000L)
     }
 
     // ---------------- 报销 ----------------

@@ -1,11 +1,8 @@
 package com.njjpro.brainbox.ui
 
-import android.app.AlarmManager
-import android.content.Context
 import android.content.Intent
 import android.net.Uri
-import android.os.Build
-import android.provider.Settings
+import android.widget.Toast
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -40,7 +37,8 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
-import com.njjpro.brainbox.notify.Notifications
+import androidx.lifecycle.compose.LifecycleResumeEffect
+import com.njjpro.brainbox.notify.ReminderHealth
 import com.njjpro.brainbox.update.UpdateChecker
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -52,14 +50,17 @@ fun SettingsScreen(
     val context = LocalContext.current
     val updateState = vm.updateState
     var permissionTick by remember { mutableStateOf(0) }
-    val notificationsOn = remember(permissionTick) { Notifications.hasPermission(context) }
-    val exactAlarmOn = remember(permissionTick) {
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
-            val manager = context.getSystemService(Context.ALARM_SERVICE) as AlarmManager
-            manager.canScheduleExactAlarms()
-        } else {
-            true
-        }
+    val notificationsOn = remember(permissionTick) { ReminderHealth.notificationsAllowed(context) }
+    val channelBlocked = remember(permissionTick) { ReminderHealth.channelBlocked(context) }
+    val exactAlarmOn = remember(permissionTick) { ReminderHealth.exactAlarmsAllowed(context) }
+    val batteryFree = remember(permissionTick) { ReminderHealth.batteryUnrestricted(context) }
+    val autoStartPage = remember { ReminderHealth.autoStartPageAvailable(context) }
+    val nextAlarm = remember(permissionTick) { ReminderHealth.nextAlarmTime(context) }
+
+    // 从系统设置页返回时刷新上面的状态
+    LifecycleResumeEffect(Unit) {
+        permissionTick++
+        onPauseOrDispose { }
     }
 
     Scaffold(
@@ -194,33 +195,73 @@ fun SettingsScreen(
 
             Card(Modifier.fillMaxWidth()) {
                 Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                    Text("提醒权限", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.SemiBold)
+                    Text("提醒可靠性", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.SemiBold)
+                    Text(
+                        text = "提醒由系统闹钟触发，App 不需要挂在后台。下面几项任何一项没开，提醒都可能到不了。",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+
                     SettingRow(
-                        title = "通知",
-                        enabled = notificationsOn,
+                        title = if (channelBlocked) "通知（「定时提醒」渠道被关闭）" else "通知",
+                        enabled = notificationsOn && !channelBlocked,
                         actionLabel = "去开启",
                         onAction = {
-                            val intent = Intent(Settings.ACTION_APP_NOTIFICATION_SETTINGS)
-                                .putExtra(Settings.EXTRA_APP_PACKAGE, context.packageName)
-                                .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-                            runCatching { context.startActivity(intent) }
-                            permissionTick++
+                            if (channelBlocked) {
+                                ReminderHealth.openChannelSettings(context)
+                            } else {
+                                ReminderHealth.openNotificationSettings(context)
+                            }
                         },
                     )
                     SettingRow(
-                        title = "精确闹钟（不开启会延迟几分钟）",
+                        title = "闹钟与提醒（精确闹钟）",
                         enabled = exactAlarmOn,
                         actionLabel = "去开启",
-                        onAction = {
-                            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
-                                val intent = Intent(Settings.ACTION_REQUEST_SCHEDULE_EXACT_ALARM)
-                                    .setData(Uri.parse("package:${context.packageName}"))
-                                    .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-                                runCatching { context.startActivity(intent) }
-                            }
-                            permissionTick++
-                        },
+                        onAction = { ReminderHealth.openExactAlarmSettings(context) },
                     )
+                    SettingRow(
+                        title = "电池优化（不受限制）",
+                        enabled = batteryFree,
+                        actionLabel = "去设置",
+                        onAction = { ReminderHealth.openBatterySettings(context) },
+                    )
+                    if (autoStartPage) {
+                        SettingRow(
+                            title = "自启动 / 后台运行",
+                            enabled = false,
+                            actionLabel = "去开启",
+                            onAction = {
+                                if (!ReminderHealth.openAutoStartSettings(context)) {
+                                    ReminderHealth.openAppDetails(context)
+                                }
+                            },
+                            ignoreState = true,
+                        )
+                    }
+
+                    Text(
+                        text = nextAlarm?.let { "下一次提醒：${formatDateTime(it)}" } ?: "当前没有排定的提醒。",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+
+                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        Button(onClick = {
+                            val ok = vm.sendTestNotification()
+                            Toast.makeText(
+                                context,
+                                if (ok) "已发出测试通知" else "通知没开，先去打开通知权限",
+                                Toast.LENGTH_SHORT,
+                            ).show()
+                        }) { Text("立即发通知") }
+
+                        OutlinedButton(onClick = {
+                            vm.scheduleTestReminder(10)
+                            Toast.makeText(context, "10 秒后会响一次，可以把 App 划掉试试", Toast.LENGTH_LONG)
+                                .show()
+                        }) { Text("10 秒后提醒") }
+                    }
                 }
             }
 
@@ -251,18 +292,24 @@ private fun SettingRow(
     enabled: Boolean,
     actionLabel: String,
     onAction: () -> Unit,
+    ignoreState: Boolean = false,
 ) {
+    val prefix = when {
+        ignoreState -> "ℹ️"
+        enabled -> "✅"
+        else -> "⚠️"
+    }
     Row(
         modifier = Modifier.fillMaxWidth(),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(8.dp),
     ) {
         Text(
-            text = if (enabled) "✅ $title" else "⚠️ $title",
+            text = "$prefix $title",
             style = MaterialTheme.typography.bodyMedium,
             modifier = Modifier.weight(1f),
         )
-        if (!enabled) {
+        if (ignoreState || !enabled) {
             TextButton(onClick = onAction) { Text(actionLabel) }
         }
     }
