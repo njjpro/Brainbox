@@ -76,6 +76,7 @@ fun ExpenseImportDialog(
                         onValueChange = { text = it },
                         modifier = Modifier
                             .fillMaxWidth()
+                            .weight(1f, fill = false)
                             .heightIn(min = 160.dp),
                         label = { Text("账单文本") },
                         minLines = 6,
@@ -98,6 +99,8 @@ fun ExpenseImportDialog(
                     Column(
                         modifier = Modifier
                             .fillMaxWidth()
+                            // 列表长的时候要能被压缩，否则底部按钮会被挤出对话框
+                            .weight(1f, fill = false)
                             .verticalScroll(rememberScrollState()),
                         verticalArrangement = Arrangement.spacedBy(6.dp),
                     ) {
