@@ -9,6 +9,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
+import com.njjpro.brainbox.data.DEFAULT_CUTOFF_DAY
 import com.njjpro.brainbox.data.Expense
 import com.njjpro.brainbox.data.Note
 import com.njjpro.brainbox.data.REPEAT_NONE
@@ -37,6 +38,16 @@ class BrainboxViewModel(app: Application) : AndroidViewModel(app) {
         repository.expenses.stateIn(viewModelScope, SharingStarted.Eagerly, emptyList())
 
     val currentVersion: String = UpdateChecker.currentVersion(appContext)
+
+    /** 报销结算日（每月几号截止），决定「这一笔算哪一期」。 */
+    var expenseCutoffDay by mutableStateOf(prefs.getInt(KEY_CUTOFF_DAY, DEFAULT_CUTOFF_DAY))
+        private set
+
+    fun updateExpenseCutoffDay(day: Int) {
+        val value = day.coerceIn(1, 31)
+        expenseCutoffDay = value
+        prefs.edit().putInt(KEY_CUTOFF_DAY, value).apply()
+    }
 
     var updateState by mutableStateOf<UpdateUiState>(UpdateUiState.Idle)
         private set
@@ -140,6 +151,12 @@ class BrainboxViewModel(app: Application) : AndroidViewModel(app) {
         viewModelScope.launch { repository.saveExpense(expense) }
     }
 
+    /** 批量写入（账单导入用），只开一个事务，写完返回条数。 */
+    fun saveExpenses(list: List<Expense>) {
+        if (list.isEmpty()) return
+        viewModelScope.launch { repository.saveExpenses(list) }
+    }
+
     fun deleteExpense(expense: Expense) {
         viewModelScope.launch { repository.deleteExpense(expense) }
     }
@@ -195,5 +212,6 @@ class BrainboxViewModel(app: Application) : AndroidViewModel(app) {
 
     private companion object {
         const val KEY_LAST_CHECK = "last_update_check"
+        const val KEY_CUTOFF_DAY = "expense_cutoff_day"
     }
 }

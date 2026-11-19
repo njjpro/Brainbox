@@ -18,6 +18,7 @@ import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.ChevronLeft
 import androidx.compose.material.icons.filled.ChevronRight
 import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material.icons.filled.Upload
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.AssistChip
 import androidx.compose.material3.Card
@@ -49,6 +50,8 @@ import androidx.compose.ui.unit.dp
 import com.njjpro.brainbox.data.EXPENSE_CATEGORIES
 import com.njjpro.brainbox.data.Expense
 import com.njjpro.brainbox.data.centsToText
+import com.njjpro.brainbox.data.cycleOf
+import com.njjpro.brainbox.data.cycleRangeText
 import com.njjpro.brainbox.data.parseAmountToCents
 import java.time.YearMonth
 import java.time.ZoneId
@@ -61,11 +64,15 @@ fun ExpenseScreen(
     onBack: () -> Unit,
 ) {
     val expenses by vm.expenses.collectAsState()
-    var month by remember { mutableStateOf(yearMonthOf(System.currentTimeMillis())) }
+    val cutoff = vm.expenseCutoffDay
+    // 报销按「周期」看：结算日 26 日时，11 月这期是 10-27 ~ 11-26
+    var month by remember { mutableStateOf(cycleOf(System.currentTimeMillis(), cutoff)) }
     var editing by remember { mutableStateOf<Expense?>(null) }
     var showDialog by remember { mutableStateOf(false) }
+    var showImport by remember { mutableStateOf(false) }
 
-    val monthExpenses = expenses.filter { yearMonthOf(it.date) == month }
+    val monthExpenses = expenses.filter { cycleOf(it.date, cutoff) == month }
+    val cycleText = "${monthLabel(month)}（${cycleRangeText(month, cutoff)}）"
     val monthTotal = monthExpenses.sumOf { it.amountCents }
     val monthUnpaid = monthExpenses.filter { !it.reimbursed }.sumOf { it.amountCents }
     val allUnpaid = expenses.filter { !it.reimbursed }.sumOf { it.amountCents }
@@ -77,6 +84,11 @@ fun ExpenseScreen(
                 navigationIcon = {
                     IconButton(onClick = onBack) {
                         Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "返回")
+                    }
+                },
+                actions = {
+                    IconButton(onClick = { showImport = true }) {
+                        Icon(Icons.Default.Upload, contentDescription = "导入账单")
                     }
                 },
             )
@@ -105,19 +117,25 @@ fun ExpenseScreen(
                             IconButton(onClick = { month = month.minusMonths(1) }) {
                                 Icon(Icons.Default.ChevronLeft, contentDescription = "上个月")
                             }
-                            Text(
-                                text = monthLabel(month),
-                                style = MaterialTheme.typography.titleMedium,
-                                fontWeight = FontWeight.SemiBold,
-                                modifier = Modifier.weight(1f),
-                            )
+                            Column(Modifier.weight(1f)) {
+                                Text(
+                                    text = monthLabel(month),
+                                    style = MaterialTheme.typography.titleMedium,
+                                    fontWeight = FontWeight.SemiBold,
+                                )
+                                Text(
+                                    text = cycleRangeText(month, cutoff),
+                                    style = MaterialTheme.typography.labelSmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                )
+                            }
                             IconButton(onClick = { month = month.plusMonths(1) }) {
                                 Icon(Icons.Default.ChevronRight, contentDescription = "下个月")
                             }
                         }
                         Row(horizontalArrangement = Arrangement.spacedBy(18.dp)) {
                             Column {
-                                Text("本项合计", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                Text("本期合计", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                                 Text(formatAmount(monthTotal), style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
                             }
                             Column {
@@ -139,7 +157,7 @@ fun ExpenseScreen(
             }
 
             if (monthExpenses.isEmpty()) {
-                item { EmptyState("${monthLabel(month)}还没有记录。点右下角 + 记一笔。") }
+                item { EmptyState("$cycleText 还没有记录。点右下角 + 记一笔，或用右上角导入。") }
             } else {
                 items(monthExpenses, key = { it.id }) { expense ->
                     ExpenseRow(
@@ -163,6 +181,16 @@ fun ExpenseScreen(
                 )
             }
         }
+    }
+
+    if (showImport) {
+        ExpenseImportDialog(
+            onDismiss = { showImport = false },
+            onImport = { list ->
+                vm.saveExpenses(list)
+                showImport = false
+            },
+        )
     }
 
     if (showDialog) {

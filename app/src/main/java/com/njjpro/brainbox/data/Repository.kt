@@ -24,5 +24,7 @@ class Repository(context: Context) {
 
     suspend fun saveExpense(expense: Expense): Long = expenseDao.upsert(expense)
 
+    suspend fun saveExpenses(items: List<Expense>) = expenseDao.upsertAll(items)
+
     suspend fun deleteExpense(expense: Expense) = expenseDao.delete(expense)
 }

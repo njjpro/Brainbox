@@ -38,6 +38,9 @@ interface ExpenseDao {
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun upsert(expense: Expense): Long
 
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun upsertAll(items: List<Expense>): List<Long>
+
     @Delete
     suspend fun delete(expense: Expense)
 }

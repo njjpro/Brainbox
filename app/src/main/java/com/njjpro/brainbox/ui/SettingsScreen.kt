@@ -5,6 +5,7 @@ import android.net.Uri
 import android.widget.Toast
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -38,6 +39,8 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.LifecycleResumeEffect
+import com.njjpro.brainbox.data.cycleOf
+import com.njjpro.brainbox.data.cycleRangeText
 import com.njjpro.brainbox.notify.ReminderHealth
 import com.njjpro.brainbox.update.UpdateChecker
 
@@ -190,6 +193,37 @@ fun SettingsScreen(
                             }
                         }
                     }
+                }
+            }
+
+            Card(Modifier.fillMaxWidth()) {
+                Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Text("报销周期", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.SemiBold)
+                    Text(
+                        text = "报销每月 21–26 号提交，账目因此按「上期截止日次日 ~ 本期截止日」归期，不按自然月。",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Text(
+                            text = "结算日：每月 ${vm.expenseCutoffDay} 日",
+                            style = MaterialTheme.typography.bodyMedium,
+                            modifier = Modifier.weight(1f),
+                        )
+                        OutlinedButton(
+                            onClick = { vm.updateExpenseCutoffDay(vm.expenseCutoffDay - 1) },
+                            contentPadding = PaddingValues(horizontal = 12.dp),
+                        ) { Text("−") }
+                        OutlinedButton(
+                            onClick = { vm.updateExpenseCutoffDay(vm.expenseCutoffDay + 1) },
+                            contentPadding = PaddingValues(horizontal = 12.dp),
+                        ) { Text("+") }
+                    }
+                    Text(
+                        text = "当前这一期：${cycleRangeText(cycleOf(System.currentTimeMillis(), vm.expenseCutoffDay), vm.expenseCutoffDay)}",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
                 }
             }
 
